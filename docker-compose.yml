@@ -1,0 +1,64 @@
+version: '3.1'
+
+# The web and visualizer service configurations were taken from
+# https://collabnix.com/getting-started-with-redis-inside-docker-container-in-2-minutes/
+# The rest are from https://github.com/thomasjpfan/redis-cluster-docker-swarm, with minor modifications.
+
+services:
+
+  web:
+    image: nicmcphee/redis-flask-demo
+    deploy:
+      replicas: 5
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits: 
+          cpus: "0.1"
+          memory: 50M
+    ports:
+      - "8000:8000"
+    networks:
+      - redis
+
+  redis-zero:
+    image: redis:4.0.11-alpine
+    networks:
+      - redis
+
+  redis:
+    image: thomasjpfan/redis-look:${TAG:-latest}
+    environment:
+      - REDIS_SENTINEL_IP=redis-sentinel
+      - REDIS_MASTER_NAME=redismaster
+      - REDIS_SENTINEL_PORT=26379
+    deploy:
+      replicas: 3
+    networks:
+      - redis
+
+  redis-sentinel:
+    image: thomasjpfan/redis-sentinel:${TAG:-latest}
+    environment:
+      - REDIS_IP=redis-zero
+      - REDIS_MASTER_NAME=redismaster
+    deploy:
+      replicas: 3
+    networks:
+      - redis
+
+  visualizer:
+    image: dockersamples/visualizer:stable
+    ports:
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+    networks:
+      - redis
+
+networks:
+  redis:
+    driver: overlay
